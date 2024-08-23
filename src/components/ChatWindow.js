@@ -2,48 +2,73 @@ import React, { forwardRef, useState, useEffect } from 'react';
 import './ChatWindow.css';
 import io from 'socket.io-client';
 
-// Move socket initialization outside the component to prevent reconnections
+// WebSocket connection to your backend
 const socket = io('https://chatbot008backend.onrender.com', {
-  // Updated to deployed backend URL
-  withCredentials: true, // Ensure credentials are sent with requests
-  transports: ['websocket', 'polling'], // Enable fallback to polling if WebSocket isn't available
+  withCredentials: true,
+  transports: ['websocket', 'polling'],
+  reconnectionAttempts: 5, // Limit reconnection attempts
+  reconnectionDelay: 2000, // Delay between reconnection attempts
 });
 
 const ChatWindow = forwardRef((props, ref) => {
-  const [messages, setMessages] = useState([]);
-  const [input, setInput] = useState('');
+  const [messages, setMessages] = useState([]); // Messages state to store the conversation
+  const [input, setInput] = useState(''); // Input field for sending messages
 
-  // Map usernames to userId keys (this should match your backend)
+  // Mapping of user roles to user IDs
   const userIdMap = {
     Titan: 'user1',
     Dcathelon: 'user2',
     DRL: 'user3',
   };
 
-  // Get logged-in user from localStorage (simulate with localStorage)
+  // Retrieve the logged-in user from localStorage
   const loggedInUser = localStorage.getItem('loggedInUser');
   const loggedInUserId = userIdMap[loggedInUser]; // Map the username to the correct userId
 
   useEffect(() => {
-    // Ensure useEffect is always called, but validate the loggedInUser within the effect
     if (!loggedInUserId) {
       alert('Invalid user! Please log in again.');
       return;
     }
 
-    // Listen for incoming messages from the server
+    console.log(`Attempting to join room with userId: ${loggedInUserId}`);
+
+    // Join the user's room when the component mounts
+    socket.emit('join', loggedInUserId, (ack) => {
+      console.log('Join event acknowledgment:', ack);
+    });
+
+    // Listen for incoming messages from the server (from Teams)
     socket.on('chat message', (message) => {
-      console.log('Message from Teams:', message);
+      console.log('Message from Teams received:', message); // Add detailed logging
       setMessages((prevMessages) => [...prevMessages, message]);
+    });
+
+    // Handle connection events
+    socket.on('connect', () => {
+      console.log('WebSocket connected');
+    });
+
+    socket.on('disconnect', (reason) => {
+      console.log('WebSocket disconnected:', reason);
+    });
+
+    socket.on('connect_error', (err) => {
+      console.error('WebSocket connection error:', err);
+    });
+
+    socket.on('reconnect_error', (err) => {
+      console.error('WebSocket reconnection error:', err);
     });
 
     // Cleanup when the component is unmounted
     return () => {
-      socket.off('chat message'); // Remove event listener
-      socket.disconnect(); // Disconnect socket
+      socket.off('chat message');
+      socket.disconnect();
     };
-  }, [loggedInUserId]); // Dependency array includes loggedInUserId, so it runs whenever it changes
+  }, [loggedInUserId]);
 
+  // Function to send a message
   const handleSend = async () => {
     if (input.trim() && loggedInUserId) {
       const newMessage = { user: true, text: input };
@@ -51,7 +76,6 @@ const ChatWindow = forwardRef((props, ref) => {
       setInput('');
 
       try {
-        // Update the API call to use the deployed backend URL
         const response = await fetch(
           'https://chatbot008backend.onrender.com/send-to-teams',
           {
@@ -61,39 +85,32 @@ const ChatWindow = forwardRef((props, ref) => {
             },
             body: JSON.stringify({
               message: input,
-              userId: loggedInUserId, // Send mapped userId
+              userId: loggedInUserId,
             }),
           }
         );
 
         if (!response.ok) {
-          throw new Error('Failed to send message to Teams');
+          throw new Error(`Failed to send message: ${response.statusText}`);
         }
 
-        const responseData = await response.json();
-        console.log('Message sent successfully to Teams:', responseData);
+        console.log('Message sent successfully');
       } catch (error) {
-        console.error('Error sending message:', error);
+        console.error('Error sending message:', error.message);
       }
-
-      // Optionally simulate a response from the chatbot
-      setTimeout(() => {
-        setMessages((prevMessages) => [
-          ...prevMessages,
-          { user: false, text: 'This is a response from the chatbot.' },
-        ]);
-      }, 1000);
     }
   };
 
+  // Send message on Enter key press
   const handleKeyPress = (e) => {
     if (e.key === 'Enter') {
-      handleSend(); // Trigger the handleSend function when Enter is pressed
+      handleSend();
     }
   };
 
   return (
     <div className="chat-window" ref={ref}>
+      {/* Message display */}
       <div className="messages-wrapper">
         {messages.map((msg, index) => (
           <div
@@ -104,12 +121,14 @@ const ChatWindow = forwardRef((props, ref) => {
           </div>
         ))}
       </div>
+
+      {/* Input field for sending messages */}
       <div className="input-wrapper">
         <input
           type="text"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          onKeyPress={handleKeyPress} // Add keypress listener for Enter key
+          onKeyPress={handleKeyPress}
           placeholder="Type a message..."
         />
         <button onClick={handleSend}>Send</button>
@@ -118,7 +137,5 @@ const ChatWindow = forwardRef((props, ref) => {
   );
 });
 
-// Adding displayName for better debugging and to satisfy ESLint
 ChatWindow.displayName = 'ChatWindow';
-
 export default ChatWindow;
