@@ -37,7 +37,18 @@ const ChatWindow = forwardRef((props, ref) => {
       `https://chatbot008backend.onrender.com/get-messages/${loggedInUserId}`
     )
       .then((response) => response.json())
-      .then((data) => setMessages(data.slice(-50))) // Store only the last 50 messages
+      .then((data) => {
+        if (data.messages && Array.isArray(data.messages)) {
+          // If data contains messages and it's an array, slice the last 50 messages
+          setMessages(data.messages.slice(-50));
+        } else {
+          console.error(
+            'Unexpected data format, expected { messages: [] }:',
+            data
+          );
+          setMessages([]); // Set messages to an empty array if data format is incorrect
+        }
+      })
       .catch((error) => console.error('Error fetching messages:', error));
 
     console.log(`Attempting to join room with userId: ${loggedInUserId}`);
