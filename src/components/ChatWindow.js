@@ -36,7 +36,12 @@ const ChatWindow = forwardRef((props, ref) => {
     fetch(
       `https://chatbot008backend.onrender.com/get-messages/${loggedInUserId}`
     )
-      .then((response) => response.json())
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        return response.json();
+      })
       .then((data) => {
         if (data.messages && Array.isArray(data.messages)) {
           // If data contains messages and it's an array, slice the last 50 messages
